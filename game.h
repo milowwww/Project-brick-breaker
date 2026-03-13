@@ -10,9 +10,9 @@
 
 struct Game
 {
-    unsigned score;
-    unsigned lives;
-    Paddle paddle;
+    unsigned score = 0;
+    unsigned lives = 0;
+    Paddle paddle{};
     std::vector<Brick> bricks;
     std::vector<Ball> balls;
 };
