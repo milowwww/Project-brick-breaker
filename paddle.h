@@ -3,9 +3,12 @@
 
 #include "tools.h"
 
-struct Paddle
-{
-    Circle shape;
+// Structure représentant la raquette
+struct Paddle {
+    Circle circle;   // cercle représentant la raquette
 };
+
+// Création d'une raquette
+Paddle create_paddle(double x, double y, double r);
 
 #endif

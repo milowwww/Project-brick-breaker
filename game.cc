@@ -68,13 +68,9 @@ bool load_game(std::string const& filename, Game& game)
     }
 
     // paddle : x y r
-    {
-        std::istringstream iss(lines[index]);
-        iss >> game.paddle.shape.center.x
-            >> game.paddle.shape.center.y
-            >> game.paddle.shape.radius;
-        ++index;
-    }
+    iss >> game.paddle.circle.center.x
+    >> game.paddle.circle.center.y
+    >> game.paddle.circle.radius;
 
     // nombre de briques
     unsigned nb_bricks = 0;
@@ -89,10 +85,9 @@ bool load_game(std::string const& filename, Game& game)
         Brick brick{};
         std::istringstream iss(lines[index]);
 
-        iss >> brick.type
-            >> brick.shape.center.x
-            >> brick.shape.center.y
-            >> brick.shape.side;
+        iss >> brick.square.center.x
+        >> brick.square.center.y
+        >> brick.square.size;
 
         // si rainbow brick, on lit aussi hit_points
         if (brick.type == 0) {
@@ -118,9 +113,9 @@ bool load_game(std::string const& filename, Game& game)
         Ball ball{};
         std::istringstream iss(lines[index]);
 
-        iss >> ball.shape.center.x
-            >> ball.shape.center.y
-            >> ball.shape.radius
+        iss >> ball.circle.center.x
+            >> ball.circle.center.y
+            >> ball.circle.radius
             >> ball.delta.x
             >> ball.delta.y;
 
