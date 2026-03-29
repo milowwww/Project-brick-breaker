@@ -57,10 +57,10 @@ namespace
     bool strictly_inside_arena(Square const& s)
     {
         double half = s.size / 2.0;
-        return (s.center.x - half > 0.0) &&
-               (s.center.x + half < arena_size) &&
-               (s.center.y - half > 0.0) &&
-               (s.center.y + half < arena_size);
+        return (s.center.x - half >= 0.0) &&
+               (s.center.x + half <= arena_size) &&
+               (s.center.y - half >= 0.0) &&
+               (s.center.y + half <= arena_size);
     }
 
     bool strictly_inside_arena(Ball const& ball)
@@ -129,7 +129,8 @@ namespace
         double diff_x = ball.shape.center.x - closest_x;
         double diff_y = ball.shape.center.y - closest_y;
 
-        return diff_x * diff_x + diff_y * diff_y < ball.shape.radius * ball.shape.radius;
+        return diff_x * diff_x + diff_y * diff_y
+               < ball.shape.radius * ball.shape.radius;
     }
 
     bool collide_paddle_ball(Paddle const& paddle, Ball const& ball)
@@ -137,6 +138,7 @@ namespace
         double dx = paddle.circle.center.x - ball.shape.center.x;
         double dy = paddle.circle.center.y - ball.shape.center.y;
         double radius_sum = paddle.circle.radius + ball.shape.radius;
+
         return dx * dx + dy * dy < radius_sum * radius_sum;
     }
 
@@ -146,6 +148,7 @@ namespace
         fake_ball.shape.center = paddle.circle.center;
         fake_ball.shape.radius = paddle.circle.radius;
         fake_ball.delta = {0.0, 0.0};
+
         return collide_ball_brick(fake_ball, brick);
     }
 }
@@ -192,6 +195,7 @@ bool load_game(std::string const& filename, Game& game)
         iss >> game.paddle.circle.center.x
             >> game.paddle.circle.center.y
             >> game.paddle.circle.radius;
+
         if (!paddle_inside_arena(game.paddle)) {
             return fail(message::paddle_outside(game.paddle.circle.center.x,
                                                 game.paddle.circle.center.y));
