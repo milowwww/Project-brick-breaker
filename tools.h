@@ -18,7 +18,7 @@ struct Circle
 struct Square
 {
     Point center;
-    double side;
+    double size;
 };
 
 Point operator+(Point const& a, Point const& b);

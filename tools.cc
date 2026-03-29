@@ -44,8 +44,8 @@ bool intersects(Circle const& c1, Circle const& c2)
 
 bool intersects(Square const& s1, Square const& s2)
 {
-    double half1 = s1.side / 2.0;
-    double half2 = s2.side / 2.0;
+    double half1 = s1.size / 2.0;
+    double half2 = s2.size / 2.0;
 
     double dx = std::abs(s1.center.x - s2.center.x);
     double dy = std::abs(s1.center.y - s2.center.y);
@@ -56,7 +56,7 @@ bool intersects(Square const& s1, Square const& s2)
 
 bool intersects(Circle const& c, Square const& s)
 {
-    double half = s.side / 2.0;
+    double half = s.size / 2.0;
 
     double dx = c.center.x - s.center.x;
     double dy = c.center.y - s.center.y;
@@ -74,7 +74,7 @@ bool intersects(Circle const& c, Square const& s)
 
 bool is_inside_arena(Square const& s, double arena_size)
 {
-    double half = s.side / 2.0;
+    double half = s.size / 2.0;
 
     double left   = s.center.x - half;
     double right  = s.center.x + half;
@@ -102,4 +102,3 @@ bool is_inside_arena(Circle const& c, double arena_size, bool ignore_bottom_radi
 
     return left_ok && right_ok && top_ok && bottom_ok;
 }
-

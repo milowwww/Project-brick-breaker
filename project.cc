@@ -10,11 +10,11 @@ int main(int argc, char* argv[])
     }
 
     std::string filename = argv[1];
-
+    Game game;
     // Cette fonction doit être définie dans game.cc / déclarée dans game.h
     // Elle lit le fichier, construit l'état du jeu, affiche le message approprié,
     // puis renvoie true si la lecture est valide, false sinon.
-    bool ok = load_game_from_file(filename);
+    bool ok = load_game(filename, game);
 
     if (ok) {
         return 0;
