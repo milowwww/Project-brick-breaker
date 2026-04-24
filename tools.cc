@@ -81,10 +81,10 @@ bool is_inside_arena(Square const& s, double arena_size)
     double bottom = s.center.y - half;
     double top    = s.center.y + half;
 
-    return (left   > epsil_zero) &&
-           (right  < arena_size - epsil_zero) &&
-           (bottom > epsil_zero) &&
-           (top    < arena_size - epsil_zero);
+   return (left   >= 0.0) &&
+       (right  <= arena_size) &&
+       (bottom >= 0.0) &&
+       (top    <= arena_size);
 }
 
 bool is_inside_arena(Circle const& c, double arena_size, bool ignore_bottom_radius)
