@@ -1,5 +1,7 @@
 #include <filesystem>
 #include <iostream>
+#include <algorithm>
+#include <cmath>
 #include "constants.h"
 #include "graphic_gui.h"
 #include "gui.h"
@@ -21,9 +23,33 @@ enum Buttons
     START,
     STEP
 };
+bool paddle_collides_with_brick(Paddle const& paddle, Brick const& brick)
+{
+    double half = brick.square.size / 2.0;
 
+    double dx = paddle.circle.center.x - brick.square.center.x;
+    double dy = paddle.circle.center.y - brick.square.center.y;
+
+    double clamped_x = std::max(-half, std::min(dx, half));
+    double clamped_y = std::max(-half, std::min(dy, half));
+
+    double closest_x = brick.square.center.x + clamped_x;
+    double closest_y = brick.square.center.y + clamped_y;
+
+    double diff_x = paddle.circle.center.x - closest_x;
+    double diff_y = paddle.circle.center.y - closest_y;
+
+    return diff_x * diff_x + diff_y * diff_y <
+           paddle.circle.radius * paddle.circle.radius;
+}
 constexpr unsigned drawing_size(500);
-
+void clear_game(Game& game)
+{
+    game.score = 0;
+    game.lives = 0;
+    game.bricks.clear();
+    game.balls.clear();
+}
 My_window::My_window(string file_name)
     : main_box(Gtk::Orientation::HORIZONTAL), panel_box(Gtk::Orientation::VERTICAL),
       command_box(Gtk::Orientation::VERTICAL), loop_activated(false),
@@ -46,8 +72,18 @@ My_window::My_window(string file_name)
     set_drawing();
     if (file_name != "")
 {
-    current_file = file_name;
-    load_game(current_file, game);
+    Game temp_game;
+
+    if (load_game(file_name, temp_game))
+    {
+        game = temp_game;
+        current_file = file_name;
+    }
+    else
+    {
+        clear_game(game);
+        current_file = "";
+    }
 }
 
 update_infos();
@@ -93,7 +129,23 @@ void My_window::save_clicked()
 }
 void My_window::restart_clicked()
 {
-    cout << __func__ << endl; // TODO: reset the game from the last read file
+    if (current_file != "")
+    {
+        Game temp_game;
+
+        if (load_game(current_file, temp_game))
+        {
+            game = temp_game;
+        }
+        else
+        {
+            game = Game{};
+            current_file = "";
+        }
+
+        update_infos();
+        drawing.queue_draw();
+    }
 }
 void My_window::start_clicked()
 {
@@ -109,7 +161,7 @@ void My_window::start_clicked()
         buttons[START].set_label("start");
         buttons[STEP].set_sensitive(true);
     }
-    else // TODO: only if the game is not finished
+    else if (!game_over(game))
     {
         loop_conn =
             Glib::signal_timeout().connect(sigc::mem_fun(*this, &My_window::loop), dt);
@@ -124,7 +176,12 @@ void My_window::start_clicked()
 }
 void My_window::step_clicked()
 {
-    cout << __func__ << endl; // TODO: make a single update
+    if (!game.balls.empty())
+    {
+        update_game(game);
+        update_infos();
+        drawing.queue_draw();
+    }
 }
 void My_window::set_key_controller()
 {
@@ -134,18 +191,25 @@ void My_window::set_key_controller()
     add_controller(contr);
 }
 bool My_window::key_pressed(guint keyval, guint keycode, Gdk::ModifierType state)
-{
+{(void)keycode;
+(void)state;
     switch (keyval)
     {
     case '1':
-        // TODO: make a single update
-        return true;
+    if (!game.balls.empty())
+    {
+        update_game(game);
+        update_infos();
+        drawing.queue_draw();
+    }
+    return true;
     case 's':
-        // TODO: pause or unpause the game
-        return true;
-    case 'r':
-        // TODO: reset the game from the last read file
-        return true;
+    start_clicked();
+    return true;
+
+case 'r':
+    restart_clicked();
+    return true;
     default:
         break;
     }
@@ -202,19 +266,32 @@ void My_window::dialog_response(int response, Gtk::FileChooserDialog *dialog)
         dialog->hide();
         break;
     case OPEN_FILE:
-        if (file_name != "")
+    if (file_name != "")
+    {
+        Game temp_game;
+
+        if (load_game(file_name.string(), temp_game))
         {
-            cout << "open file " << file_name << endl; // TODO: set game from a file
-            dialog->hide();
+            game = temp_game;
+            current_file = file_name.string();
         }
-        break;
+        else
+        {
+            clear_game(game);
+        }
+
+        update_infos();
+        drawing.queue_draw();
+        dialog->hide();
+    }
+    break;
     case SAVE_FILE:
-        if (file_name != "")
-        {
-            cout << "save file " << file_name << endl; // TODO: save the game
-            dialog->hide();
-        }
-        break;
+    if (file_name != "")
+    {
+        save_game(file_name.string(), game);
+        dialog->hide();
+    }
+    break;
     default:
         break;
     }
@@ -224,8 +301,13 @@ bool My_window::loop()
 {
     if (loop_activated)
     {
-        // TODO: update the game and the interface
-        return true;
+        if (!game.balls.empty())
+        {
+            update_game(game);
+            update_infos();
+            drawing.queue_draw();
+            return true;
+        }
     }
     return false;
 }
@@ -267,7 +349,51 @@ void My_window::on_draw(const Cairo::RefPtr<Cairo::Context> &cr, int width, int 
     double side(min(width, height));
     cr->translate((width - side) / 2, (height + side) / 2);
     cr->scale(side / (arena_size), -side / (arena_size));
-    // TODO: draw the game
+    // arène
+Square arena;
+arena.center = {arena_size / 2.0, arena_size / 2.0};
+arena.size = arena_size;
+graphic_draw_square(arena, GREY, false);
+
+// briques
+for (auto const& brick : game.bricks)
+{
+    Color color = RED;
+
+    if (brick.type == RAINBOW_BRICK) {
+        switch (brick.hit_points) {
+        case 1: color = RED; break;
+        case 2: color = ORANGE; break;
+        case 3: color = YELLOW; break;
+        case 4: color = GREEN; break;
+        case 5: color = CYAN; break;
+        case 6: color = BLUE; break;
+        case 7: color = PURPLE; break;
+        default: color = RED; break;
+        }
+        graphic_draw_square(brick.square, color, true);
+    }
+    else if (brick.type == BALL_BRICK) {
+        graphic_draw_square(brick.square, RED, true);
+
+        Circle c;
+        c.center = brick.square.center;
+        c.radius = new_ball_radius;
+        graphic_draw_circle(c, BLACK, true);
+    }
+    else if (brick.type == SPLIT_BRICK) {
+        graphic_draw_square(brick.square, RED, true);
+    }
+}
+
+// balles
+for (auto const& ball : game.balls)
+{
+    graphic_draw_circle(ball.shape, BLACK, true);
+}
+
+// raquette
+graphic_draw_arc(game.paddle.circle, BLACK);
 }
 
 void My_window::set_mouse_controller()
@@ -286,9 +412,73 @@ void My_window::set_mouse_controller()
 }
 void My_window::on_drawing_left_click(int n_press, double x, double y)
 {
-    cout << __func__ << endl; // TODO
+    (void)n_press;
+(void)x;
+(void)y;
+    if (game.balls.empty() && game.lives > 0)
+    {
+        Ball ball;
+
+        ball.shape.radius = new_ball_radius;
+        ball.shape.center.x = game.paddle.circle.center.x;
+        ball.shape.center.y = game.paddle.circle.center.y + game.paddle.circle.radius
+                              + new_ball_radius + epsil_zero;
+
+        ball.delta.x = 0.0;
+        ball.delta.y = new_ball_delta_norm;
+
+        game.balls.push_back(ball);
+        --game.lives;
+
+        update_infos();
+        drawing.queue_draw();
+    }
 }
 void My_window::on_drawing_move(double x, double y)
 {
-    cout << __func__ << endl; // TODO
+    int width = drawing.get_width();
+    int height = drawing.get_height();
+
+    double side = std::min(width, height);
+
+    double model_x = (x - (width - side) / 2.0) * arena_size / side;
+
+    if (model_x < 0.0) {
+        model_x = 0.0;
+    }
+
+    if (model_x > arena_size) {
+        model_x = arena_size;
+    }
+
+    double old_x = game.paddle.circle.center.x;
+    game.paddle.circle.center.x = model_x;
+
+    // sécurité : si la raquette sort de l’arène, on annule
+    double y0 = game.paddle.circle.center.y;
+    double r = game.paddle.circle.radius;
+
+    double span_sq = r * r - y0 * y0;
+
+    if (span_sq <= 0.0) {
+        game.paddle.circle.center.x = old_x;
+        return;
+    }
+
+    double span = std::sqrt(span_sq);
+
+    if (game.paddle.circle.center.x - span < 0.0 ||
+        game.paddle.circle.center.x + span > arena_size) {
+        game.paddle.circle.center.x = old_x;
+        return;
+    }
+for (auto const& brick : game.bricks)
+{
+    if (paddle_collides_with_brick(game.paddle, brick))
+    {
+        game.paddle.circle.center.x = old_x;
+        return;
+    }
+}
+    drawing.queue_draw();
 }

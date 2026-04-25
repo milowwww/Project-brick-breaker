@@ -56,3 +56,62 @@ void set_color(Color color)
     }
     (*ptcr)->set_source_rgb(r, g, b);
 }
+#include <cmath>
+
+void graphic_draw_square(Square const& square, Color color, bool filled)
+{
+    set_color(color);
+
+    double half = square.size / 2.0;
+
+    (*ptcr)->rectangle(square.center.x - half,
+                       square.center.y - half,
+                       square.size,
+                       square.size);
+
+    if (filled) {
+        (*ptcr)->fill();
+    } else {
+        (*ptcr)->set_line_width(0.5);
+        (*ptcr)->stroke();
+    }
+}
+
+void graphic_draw_circle(Circle const& circle, Color color, bool filled)
+{
+    set_color(color);
+
+    (*ptcr)->arc(circle.center.x,
+                 circle.center.y,
+                 circle.radius,
+                 0.0,
+                 2.0 * M_PI);
+
+    if (filled) {
+        (*ptcr)->fill();
+    } else {
+        (*ptcr)->set_line_width(0.5);
+        (*ptcr)->stroke();
+    }
+}
+
+void graphic_draw_arc(Circle const& circle, Color color)
+{
+    set_color(color);
+
+    double value = -circle.center.y / circle.radius;
+
+    if (value < -1.0) value = -1.0;
+    if (value > 1.0) value = 1.0;
+
+    double angle1 = std::asin(value);
+    double angle2 = M_PI - angle1;
+
+    (*ptcr)->set_line_width(0.7);
+    (*ptcr)->arc(circle.center.x,
+                 circle.center.y,
+                 circle.radius,
+                 angle1,
+                 angle2);
+    (*ptcr)->stroke();
+}

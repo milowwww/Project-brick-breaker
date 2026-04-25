@@ -1,7 +1,7 @@
 #include "game.h"
 #include "constants.h"
 #include "message.h"
-
+#include <memory>
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -12,255 +12,248 @@
 
 namespace
 {
-    bool is_comment_or_empty(std::string const& line)
-    {
-        std::string trimmed = line;
+bool is_comment_or_empty(std::string const& line)
+{
+    std::string trimmed = line;
 
-        size_t first = trimmed.find_first_not_of(" \t\r\n");
-        if (first == std::string::npos) {
-            return true;
-        }
+    size_t first = trimmed.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos)
+        return true;
 
-        trimmed = trimmed.substr(first);
-        return trimmed.empty() || trimmed[0] == '#';
-    }
+    trimmed = trimmed.substr(first);
+    return trimmed.empty() || trimmed[0] == '#';
+}
 
-    std::vector<std::string> read_useful_lines(std::string const& filename)
-    {
-        std::vector<std::string> lines;
-        std::ifstream file(filename);
+std::vector<std::string> read_useful_lines(std::string const& filename)
+{
+    std::vector<std::string> lines;
+    std::ifstream file(filename);
 
-        if (!file) {
-            return lines;
-        }
-
-        std::string line;
-        while (std::getline(file, line)) {
-            if (!is_comment_or_empty(line)) {
-                lines.push_back(line);
-            }
-        }
-
+    if (!file)
         return lines;
-    }
 
-    double norm_squared_local(Point const& p)
-    {
-        return p.x * p.x + p.y * p.y;
-    }
+    std::string line;
+    while (std::getline(file, line))
+        if (!is_comment_or_empty(line))
+            lines.push_back(line);
 
-    double norm_local(Point const& p)
-    {
-        return std::sqrt(norm_squared_local(p));
-    }
+    return lines;
+}
 
-    bool strictly_inside_arena(Square const& s)
-    {
-        double half = s.size / 2.0;
-        return (s.center.x - half >= 0.0) &&
-               (s.center.x + half <= arena_size) &&
-               (s.center.y - half >= 0.0) &&
-               (s.center.y + half <= arena_size);
-    }
 
-    bool strictly_inside_arena(Ball const& ball)
-    {
-        Circle const& c = ball.shape;
-        return (c.center.x - c.radius > 0.0) &&
-               (c.center.x + c.radius < arena_size) &&
-               (c.center.y + c.radius < arena_size) &&
-               (c.center.y > 0.0);
-    }
+bool strictly_inside_arena(Square const& s)
+{
+    double half = s.size / 2.0;
 
-    bool paddle_inside_arena(Paddle const& paddle)
-    {
-        Circle const& c = paddle.circle;
+    return (s.center.x - half >= 0.0) &&
+           (s.center.x + half <= arena_size) &&
+           (s.center.y - half >= 0.0) &&
+           (s.center.y + half <= arena_size);
+}
 
-        if (c.center.y > 0.0) {
-            return false;
-        }
-        if (c.center.y + c.radius <= 0.0) {
-            return false;
-        }
+bool strictly_inside_arena(Ball const& ball)
+{
+    Circle const& c = ball.shape;
 
-        double x_span_sq = c.radius * c.radius - c.center.y * c.center.y;
-        if (x_span_sq <= 0.0) {
-            return false;
-        }
+    return (c.center.x - c.radius > 0.0) &&
+           (c.center.x + c.radius < arena_size) &&
+           (c.center.y + c.radius < arena_size) &&
+           (c.center.y > 0.0);
+}
 
-        double x_span = std::sqrt(x_span_sq);
-        double left = c.center.x - x_span;
-        double right = c.center.x + x_span;
+bool paddle_inside_arena(Paddle const& paddle)
+{
+    Circle const& c = paddle.circle;
 
-        return (left > 0.0) && (right < arena_size);
-    }
+    if (c.center.y > 0.0)
+        return false;
 
-    bool collide_bricks(Brick const& b1, Brick const& b2)
-    {
-        double half1 = b1.square.size / 2.0;
-        double half2 = b2.square.size / 2.0;
+    if (c.center.y + c.radius <= 0.0)
+        return false;
 
-        double dx = std::abs(b1.square.center.x - b2.square.center.x);
-        double dy = std::abs(b1.square.center.y - b2.square.center.y);
+    double span_sq = c.radius * c.radius - c.center.y * c.center.y;
 
-        return (dx < half1 + half2) && (dy < half1 + half2);
-    }
+    if (span_sq <= 0.0)
+        return false;
 
-    bool collide_ball_ball(Ball const& b1, Ball const& b2)
-    {
-        Point diff{b1.shape.center.x - b2.shape.center.x,
-                   b1.shape.center.y - b2.shape.center.y};
-        double radius_sum = b1.shape.radius + b2.shape.radius;
-        return norm_squared_local(diff) < radius_sum * radius_sum;
-    }
+    double span = std::sqrt(span_sq);
 
-    bool collide_ball_brick(Ball const& ball, Brick const& brick)
-    {
-        double half = brick.square.size / 2.0;
-        double dx = ball.shape.center.x - brick.square.center.x;
-        double dy = ball.shape.center.y - brick.square.center.y;
+    return (c.center.x - span > 0.0) &&
+           (c.center.x + span < arena_size);
+}
 
-        double clamped_x = std::max(-half, std::min(dx, half));
-        double clamped_y = std::max(-half, std::min(dy, half));
+bool collide_bricks(Brick const& b1, Brick const& b2)
+{
+    double half1 = b1.square.size / 2.0;
+    double half2 = b2.square.size / 2.0;
 
-        double closest_x = brick.square.center.x + clamped_x;
-        double closest_y = brick.square.center.y + clamped_y;
+    double dx = std::abs(b1.square.center.x - b2.square.center.x);
+    double dy = std::abs(b1.square.center.y - b2.square.center.y);
 
-        double diff_x = ball.shape.center.x - closest_x;
-        double diff_y = ball.shape.center.y - closest_y;
+    return (dx < half1 + half2) &&
+           (dy < half1 + half2);
+}
 
-        return diff_x * diff_x + diff_y * diff_y
-               < ball.shape.radius * ball.shape.radius;
-    }
+bool collide_ball_ball(Ball const& b1, Ball const& b2)
+{
+    Point diff{b1.shape.center.x - b2.shape.center.x,
+               b1.shape.center.y - b2.shape.center.y};
 
-    bool collide_paddle_ball(Paddle const& paddle, Ball const& ball)
-    {
-        double dx = paddle.circle.center.x - ball.shape.center.x;
-        double dy = paddle.circle.center.y - ball.shape.center.y;
-        double radius_sum = paddle.circle.radius + ball.shape.radius;
+    double radius_sum = b1.shape.radius + b2.shape.radius;
 
-        return dx * dx + dy * dy < radius_sum * radius_sum;
-    }
+    return norm_squared(diff) < radius_sum * radius_sum;
+}
 
-    bool collide_paddle_brick(Paddle const& paddle, Brick const& brick)
-    {
-        Ball fake_ball{};
-        fake_ball.shape.center = paddle.circle.center;
-        fake_ball.shape.radius = paddle.circle.radius;
-        fake_ball.delta = {0.0, 0.0};
+bool collide_ball_brick(Ball const& ball, Brick const& brick)
+{
+    double half = brick.square.size / 2.0;
 
-        return collide_ball_brick(fake_ball, brick);
-    }
+    double dx = ball.shape.center.x - brick.square.center.x;
+    double dy = ball.shape.center.y - brick.square.center.y;
+
+    double clamped_x = std::max(-half, std::min(dx, half));
+    double clamped_y = std::max(-half, std::min(dy, half));
+
+    double closest_x = brick.square.center.x + clamped_x;
+    double closest_y = brick.square.center.y + clamped_y;
+
+    double diff_x = ball.shape.center.x - closest_x;
+    double diff_y = ball.shape.center.y - closest_y;
+
+    return diff_x * diff_x + diff_y * diff_y <
+           ball.shape.radius * ball.shape.radius;
+}
+
+bool collide_paddle_ball(Paddle const& paddle, Ball const& ball)
+{
+    double dx = paddle.circle.center.x - ball.shape.center.x;
+    double dy = paddle.circle.center.y - ball.shape.center.y;
+
+    double radius_sum = paddle.circle.radius + ball.shape.radius;
+
+    return dx * dx + dy * dy < radius_sum * radius_sum;
+}
+
+bool collide_paddle_brick(Paddle const& paddle, Brick const& brick)
+{
+    Ball fake_ball{};
+    fake_ball.shape.center = paddle.circle.center;
+    fake_ball.shape.radius = paddle.circle.radius;
+
+    return collide_ball_brick(fake_ball, brick);
+}
 }
 
 bool load_game(std::string const& filename, Game& game)
 {
     std::vector<std::string> lines = read_useful_lines(filename);
 
-    if (lines.empty()) {
+    if (lines.empty())
         return false;
-    }
 
-    auto fail = [](std::string const& msg) {
+    auto fail = [](std::string const& msg)
+    {
         std::cout << msg;
         return false;
     };
 
     size_t index = 0;
 
+    // score
     {
-        std::istringstream iss(lines[index]);
-        int score = 0;
+        std::istringstream iss(lines[index++]);
+        int score;
         iss >> score;
-        if (score < 0) {
+
+        if (score < 0)
             return fail(message::invalid_score(score));
-        }
-        game.score = static_cast<unsigned>(score);
-        ++index;
+
+        game.score = score;
     }
 
+    // lives
     {
-        std::istringstream iss(lines[index]);
-        int lives = 0;
+        std::istringstream iss(lines[index++]);
+        int lives;
         iss >> lives;
-        if (lives < 0) {
+
+        if (lives < 0)
             return fail(message::invalid_lives(lives));
-        }
-        game.lives = static_cast<unsigned>(lives);
-        ++index;
+
+        game.lives = lives;
     }
 
+    // paddle
     {
-        std::istringstream iss(lines[index]);
+        std::istringstream iss(lines[index++]);
+
         iss >> game.paddle.circle.center.x
             >> game.paddle.circle.center.y
             >> game.paddle.circle.radius;
 
-        if (!paddle_inside_arena(game.paddle)) {
-            return fail(message::paddle_outside(game.paddle.circle.center.x,
-                                                game.paddle.circle.center.y));
-        }
-        ++index;
+        if (!paddle_inside_arena(game.paddle))
+            return fail(message::paddle_outside(
+                game.paddle.circle.center.x,
+                game.paddle.circle.center.y));
     }
 
-    unsigned nb_bricks = 0;
-    {
-        std::istringstream iss(lines[index]);
-        iss >> nb_bricks;
-        ++index;
-    }
-
+    // bricks
     game.bricks.clear();
-    for (unsigned i = 0; i < nb_bricks; ++i) {
-        Brick brick{};
-        std::istringstream iss(lines[index]);
 
-        int type_int = 0;
-        iss >> type_int
-            >> brick.square.center.x
-            >> brick.square.center.y
-            >> brick.square.size;
+for (unsigned i = 0; i < nb_bricks; ++i)
+{
+    Square square{};
+    std::istringstream iss(lines[index++]);
 
-        if (brick.square.size < brick_size_min) {
-            return fail(message::invalid_brick_size(brick.square.size));
-        }
+    int type;
+    iss >> type
+        >> square.center.x
+        >> square.center.y
+        >> square.size;
 
-        if (type_int < 0 || type_int > 2) {
-            return fail(message::invalid_brick_type(type_int));
-        }
-        brick.type = static_cast<BrickType>(type_int);
+    if (square.size < brick_size_min)
+        return fail(message::invalid_brick_size(square.size));
 
-        if (!strictly_inside_arena(brick.square)) {
-            return fail(message::brick_outside(brick.square.center.x,
-                                               brick.square.center.y));
-        }
+    if (type < 0 || type > 2)
+        return fail(message::invalid_brick_type(type));
 
-        if (brick.type == RAINBOW_BRICK) {
-            int hit_points = 0;
-            iss >> hit_points;
-            if (hit_points < 1 || hit_points > 7) {
-                return fail(message::invalid_hit_points(hit_points));
-            }
-            brick.hit_points = static_cast<unsigned>(hit_points);
-        } else {
-            brick.hit_points = 0;
-        }
+    if (!strictly_inside_arena(square))
+        return fail(message::brick_outside(square.center.x, square.center.y));
 
-        game.bricks.push_back(brick);
-        ++index;
-    }
-
-    unsigned nb_balls = 0;
+    if (type == RAINBOW_BRICK)
     {
-        std::istringstream iss(lines[index]);
+        int hp;
+        iss >> hp;
+
+        if (hp < 1 || hp > 7)
+            return fail(message::invalid_hit_points(hp));
+
+        game.bricks.push_back(
+            std::make_shared<RainbowBrick>(square, static_cast<unsigned>(hp))
+        );
+    }
+    else if (type == BALL_BRICK)
+    {
+        game.bricks.push_back(std::make_shared<BallBrick>(square));
+    }
+    else
+    {
+        game.bricks.push_back(std::make_shared<SplitBrick>(square));
+    }
+}
+    // balls
+    unsigned nb_balls;
+    {
+        std::istringstream iss(lines[index++]);
         iss >> nb_balls;
-        ++index;
     }
 
     game.balls.clear();
-    for (unsigned i = 0; i < nb_balls; ++i) {
+
+    for (unsigned i = 0; i < nb_balls; ++i)
+    {
         Ball ball{};
-        std::istringstream iss(lines[index]);
+        std::istringstream iss(lines[index++]);
 
         iss >> ball.shape.center.x
             >> ball.shape.center.y
@@ -268,55 +261,106 @@ bool load_game(std::string const& filename, Game& game)
             >> ball.delta.x
             >> ball.delta.y;
 
-        if (!strictly_inside_arena(ball)) {
-            return fail(message::ball_outside(ball.shape.center.x,
-                                              ball.shape.center.y));
-        }
+        if (!strictly_inside_arena(ball))
+            return fail(message::ball_outside(
+                ball.shape.center.x,
+                ball.shape.center.y));
 
-        if (norm_local(ball.delta) > delta_norm_max) {
-            return fail(message::invalid_delta(ball.delta.x, ball.delta.y));
-        }
+        if (norm(ball.delta) > delta_norm_max)
+            return fail(message::invalid_delta(
+                ball.delta.x,
+                ball.delta.y));
 
         game.balls.push_back(ball);
-        ++index;
-    }
-
-    for (size_t i = 0; i < game.bricks.size(); ++i) {
-        for (size_t j = i + 1; j < game.bricks.size(); ++j) {
-            if (collide_bricks(game.bricks[i], game.bricks[j])) {
-                return fail(message::collision_bricks(i, j));
-            }
-        }
-    }
-
-    for (size_t i = 0; i < game.bricks.size(); ++i) {
-        if (collide_paddle_brick(game.paddle, game.bricks[i])) {
-            return fail(message::collision_paddle_brick(i));
-        }
-    }
-
-    for (size_t i = 0; i < game.balls.size(); ++i) {
-        for (size_t j = i + 1; j < game.balls.size(); ++j) {
-            if (collide_ball_ball(game.balls[i], game.balls[j])) {
-                return fail(message::collision_balls(i, j));
-            }
-        }
-    }
-
-    for (size_t i = 0; i < game.balls.size(); ++i) {
-        for (size_t j = 0; j < game.bricks.size(); ++j) {
-            if (collide_ball_brick(game.balls[i], game.bricks[j])) {
-                return fail(message::collision_ball_brick(i, j));
-            }
-        }
-    }
-
-    for (size_t i = 0; i < game.balls.size(); ++i) {
-        if (collide_paddle_ball(game.paddle, game.balls[i])) {
-            return fail(message::collision_paddle_ball(i));
-        }
     }
 
     std::cout << message::success();
+    return true;
+}
+
+void update_game(Game& game)
+{
+    for (auto& ball : game.balls)
+    {
+        ball.shape.center.x += ball.delta.x;
+        ball.shape.center.y += ball.delta.y;
+
+        // rebond mur gauche
+        if (ball.shape.center.x - ball.shape.radius <= 0.0)
+        {
+            ball.delta.x = -ball.delta.x;
+        }
+
+        // rebond mur droit
+        if (ball.shape.center.x + ball.shape.radius >= arena_size)
+        {
+            ball.delta.x = -ball.delta.x;
+        }
+
+        // rebond plafond
+        if (ball.shape.center.y + ball.shape.radius >= arena_size)
+        {
+            ball.delta.y = -ball.delta.y;
+        }
+
+        // balle tombe en bas → perdue
+        if (ball.shape.center.y - ball.shape.radius <= 0.0)
+        {
+            game.balls.clear();
+        }
+    }
+}
+
+bool game_over(Game const& game)
+{
+    return game.bricks.empty() ||
+           (game.balls.empty() && game.lives == 0);
+}
+bool save_game(std::string const& filename, Game const& game)
+{
+    std::ofstream file(filename);
+
+    if (!file) {
+        return false;
+    }
+
+    file << "# score\n";
+    file << game.score << "\n\n";
+
+    file << "# lives\n";
+    file << game.lives << "\n\n";
+
+    file << "# paddle\n";
+    file << game.paddle.circle.center.x << " "
+         << game.paddle.circle.center.y << " "
+         << game.paddle.circle.radius << "\n\n";
+
+    file << "# bricks\n";
+    file << game.bricks.size() << "\n";
+
+    for (auto const& brick : game.bricks) {
+        file << static_cast<int>(brick.type) << " "
+             << brick.square.center.x << " "
+             << brick.square.center.y << " "
+             << brick.square.size;
+
+        if (brick.type == RAINBOW_BRICK) {
+            file << " " << brick.hit_points;
+        }
+
+        file << "\n";
+    }
+
+    file << "\n# balls\n";
+    file << game.balls.size() << "\n";
+
+    for (auto const& ball : game.balls) {
+        file << ball.shape.center.x << " "
+             << ball.shape.center.y << " "
+             << ball.shape.radius << " "
+             << ball.delta.x << " "
+             << ball.delta.y << "\n";
+    }
+
     return true;
 }

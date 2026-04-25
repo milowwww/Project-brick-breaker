@@ -9,14 +9,42 @@ enum BrickType {
     SPLIT_BRICK = 2
 };
 
-struct Brick {
+class Brick
+{
+public:
+    Brick(Square square, BrickType type);
+    virtual ~Brick() = default;
+
+    Square get_square() const;
+    BrickType get_type() const;
+
+    virtual unsigned get_hit_points() const;
+
+protected:
     Square square;
     BrickType type;
+};
+
+class RainbowBrick : public Brick
+{
+public:
+    RainbowBrick(Square square, unsigned hit_points);
+    unsigned get_hit_points() const override;
+
+private:
     unsigned hit_points;
 };
 
-Brick create_brick(double x, double y, double size, BrickType type, unsigned hit_points);
-bool is_destroyed(const Brick& b);
-void hit_brick(Brick& b);
+class BallBrick : public Brick
+{
+public:
+    BallBrick(Square square);
+};
+
+class SplitBrick : public Brick
+{
+public:
+    SplitBrick(Square square);
+};
 
 #endif

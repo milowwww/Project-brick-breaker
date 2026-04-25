@@ -1,6 +1,6 @@
 #ifndef GAME_H
 #define GAME_H
-
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -13,10 +13,13 @@ struct Game
     unsigned score = 0;
     unsigned lives = 0;
     Paddle paddle{};
-    std::vector<Brick> bricks;
+    std::vector<std::shared_ptr<Brick>> bricks;
     std::vector<Ball> balls;
 };
 
 bool load_game(std::string const& filename, Game& game);
+bool save_game(std::string const& filename, Game const& game);
+void update_game(Game& game);
+bool game_over(Game const& game);
 
 #endif
