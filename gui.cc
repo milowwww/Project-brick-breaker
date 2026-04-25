@@ -25,16 +25,17 @@ enum Buttons
 };
 bool paddle_collides_with_brick(Paddle const& paddle, Brick const& brick)
 {
-    double half = brick.square.size / 2.0;
+    Square square = brick.get_square();
+    double half = square.size / 2.0;
 
-    double dx = paddle.circle.center.x - brick.square.center.x;
-    double dy = paddle.circle.center.y - brick.square.center.y;
+    double dx = paddle.circle.center.x - square.center.x;
+    double dy = paddle.circle.center.y - square.center.y;
 
     double clamped_x = std::max(-half, std::min(dx, half));
     double clamped_y = std::max(-half, std::min(dy, half));
 
-    double closest_x = brick.square.center.x + clamped_x;
-    double closest_y = brick.square.center.y + clamped_y;
+    double closest_x = square.center.x + clamped_x;
+    double closest_y = square.center.y + clamped_y;
 
     double diff_x = paddle.circle.center.x - closest_x;
     double diff_y = paddle.circle.center.y - closest_y;
@@ -358,10 +359,14 @@ graphic_draw_square(arena, GREY, false);
 // briques
 for (auto const& brick : game.bricks)
 {
+    Square square = brick->get_square();
+    BrickType type = brick->get_type();
+    unsigned hit_points = brick->get_hit_points();
+
     Color color = RED;
 
-    if (brick.type == RAINBOW_BRICK) {
-        switch (brick.hit_points) {
+    if (type == RAINBOW_BRICK) {
+        switch (hit_points) {
         case 1: color = RED; break;
         case 2: color = ORANGE; break;
         case 3: color = YELLOW; break;
@@ -371,18 +376,18 @@ for (auto const& brick : game.bricks)
         case 7: color = PURPLE; break;
         default: color = RED; break;
         }
-        graphic_draw_square(brick.square, color, true);
+        graphic_draw_square(square, color, true);
     }
-    else if (brick.type == BALL_BRICK) {
-        graphic_draw_square(brick.square, RED, true);
+    else if (type == BALL_BRICK) {
+        graphic_draw_square(square, RED, true);
 
         Circle c;
-        c.center = brick.square.center;
+        c.center = square.center;
         c.radius = new_ball_radius;
         graphic_draw_circle(c, BLACK, true);
     }
-    else if (brick.type == SPLIT_BRICK) {
-        graphic_draw_square(brick.square, RED, true);
+    else if (type == SPLIT_BRICK) {
+        graphic_draw_square(square, RED, true);
     }
 }
 
@@ -474,7 +479,7 @@ void My_window::on_drawing_move(double x, double y)
     }
 for (auto const& brick : game.bricks)
 {
-    if (paddle_collides_with_brick(game.paddle, brick))
+    if (paddle_collides_with_brick(game.paddle, *brick))
     {
         game.paddle.circle.center.x = old_x;
         return;
