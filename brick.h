@@ -19,6 +19,7 @@ public:
     BrickType get_type() const;
 
     virtual unsigned get_hit_points() const;
+    virtual void hit();
 
 protected:
     Square square;
@@ -30,6 +31,7 @@ class RainbowBrick : public Brick
 public:
     RainbowBrick(Square square, unsigned hit_points);
     unsigned get_hit_points() const override;
+    void hit() override;
 
 private:
     unsigned hit_points;

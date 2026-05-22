@@ -1,5 +1,6 @@
 #ifndef GAME_H
 #define GAME_H
+
 #include <memory>
 #include <string>
 #include <vector>
@@ -8,10 +9,18 @@
 #include "brick.h"
 #include "paddle.h"
 
+enum GameStatus
+{
+    ONGOING,
+    WON,
+    LOST
+};
+
 struct Game
 {
     unsigned score = 0;
     unsigned lives = 0;
+    GameStatus status = ONGOING;
     Paddle paddle{};
     std::vector<std::shared_ptr<Brick>> bricks;
     std::vector<Ball> balls;

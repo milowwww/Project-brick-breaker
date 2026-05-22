@@ -48,6 +48,7 @@ void clear_game(Game& game)
 {
     game.score = 0;
     game.lives = 0;
+    game.status = ONGOING;
     game.bricks.clear();
     game.balls.clear();
 }
@@ -387,8 +388,25 @@ for (auto const& brick : game.bricks)
         graphic_draw_circle(c, BLACK, true);
     }
     else if (type == SPLIT_BRICK) {
-        graphic_draw_square(square, RED, true);
+    graphic_draw_square(square, RED, true);
+
+    double small_size = (square.size - split_brick_gap) / 2.0;
+
+    if (small_size >= brick_size_min)
+    {
+        double offset = (small_size + split_brick_gap) / 2.0;
+
+        Square s1{{square.center.x - offset, square.center.y - offset}, small_size};
+        Square s2{{square.center.x + offset, square.center.y - offset}, small_size};
+        Square s3{{square.center.x - offset, square.center.y + offset}, small_size};
+        Square s4{{square.center.x + offset, square.center.y + offset}, small_size};
+
+        graphic_draw_square(s1, ORANGE, true);
+        graphic_draw_square(s2, ORANGE, true);
+        graphic_draw_square(s3, ORANGE, true);
+        graphic_draw_square(s4, ORANGE, true);
     }
+}
 }
 
 // balles

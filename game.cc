@@ -172,7 +172,6 @@ bool load_game(std::string const& filename, Game& game)
 
     size_t index = 0;
 
-    // score
     {
         std::istringstream iss(lines[index++]);
         int score = 0;
@@ -185,7 +184,6 @@ bool load_game(std::string const& filename, Game& game)
         game.score = static_cast<unsigned>(score);
     }
 
-    // lives
     {
         std::istringstream iss(lines[index++]);
         int lives = 0;
@@ -198,7 +196,6 @@ bool load_game(std::string const& filename, Game& game)
         game.lives = static_cast<unsigned>(lives);
     }
 
-    // paddle
     {
         std::istringstream iss(lines[index++]);
 
@@ -213,7 +210,6 @@ bool load_game(std::string const& filename, Game& game)
         }
     }
 
-    // nombre de briques
     unsigned nb_bricks = 0;
     {
         std::istringstream iss(lines[index++]);
@@ -273,7 +269,6 @@ bool load_game(std::string const& filename, Game& game)
         }
     }
 
-    // nombre de balles
     unsigned nb_balls = 0;
     {
         std::istringstream iss(lines[index++]);
@@ -308,7 +303,6 @@ bool load_game(std::string const& filename, Game& game)
         game.balls.push_back(ball);
     }
 
-    // collisions briques-briques
     for (size_t i = 0; i < game.bricks.size(); ++i) {
         for (size_t j = i + 1; j < game.bricks.size(); ++j) {
             if (collide_bricks(*game.bricks[i], *game.bricks[j])) {
@@ -317,14 +311,12 @@ bool load_game(std::string const& filename, Game& game)
         }
     }
 
-    // collisions paddle-briques
     for (size_t i = 0; i < game.bricks.size(); ++i) {
         if (collide_paddle_brick(game.paddle, *game.bricks[i])) {
             return fail(message::collision_paddle_brick(i));
         }
     }
 
-    // collisions balles-balles
     for (size_t i = 0; i < game.balls.size(); ++i) {
         for (size_t j = i + 1; j < game.balls.size(); ++j) {
             if (collide_ball_ball(game.balls[i], game.balls[j])) {
@@ -333,7 +325,6 @@ bool load_game(std::string const& filename, Game& game)
         }
     }
 
-    // collisions balles-briques
     for (size_t i = 0; i < game.balls.size(); ++i) {
         for (size_t j = 0; j < game.bricks.size(); ++j) {
             if (collide_ball_brick(game.balls[i], *game.bricks[j])) {
@@ -342,11 +333,22 @@ bool load_game(std::string const& filename, Game& game)
         }
     }
 
-    // collisions paddle-balles
     for (size_t i = 0; i < game.balls.size(); ++i) {
         if (collide_paddle_ball(game.paddle, game.balls[i])) {
             return fail(message::collision_paddle_ball(i));
         }
+    }
+
+    game.status = ONGOING;
+
+    if (game.bricks.empty())
+    {
+        game.status = WON;
+    }
+
+    if (game.balls.empty() && game.lives == 0)
+    {
+        game.status = LOST;
     }
 
     std::cout << message::success();
@@ -355,6 +357,13 @@ bool load_game(std::string const& filename, Game& game)
 
 void update_game(Game& game)
 {
+    if (game.status != ONGOING) {
+        return;
+    }
+
+    std::vector<Ball> new_balls;
+    std::vector<std::shared_ptr<Brick>> new_bricks;
+
     for (auto& ball : game.balls)
     {
         ball.shape.center.x += ball.delta.x;
@@ -362,34 +371,145 @@ void update_game(Game& game)
 
         if (ball.shape.center.x - ball.shape.radius <= 0.0)
         {
-            ball.delta.x = -ball.delta.x;
             ball.shape.center.x = ball.shape.radius;
+            ball.delta.x = -ball.delta.x;
         }
 
         if (ball.shape.center.x + ball.shape.radius >= arena_size)
         {
-            ball.delta.x = -ball.delta.x;
             ball.shape.center.x = arena_size - ball.shape.radius;
+            ball.delta.x = -ball.delta.x;
         }
 
         if (ball.shape.center.y + ball.shape.radius >= arena_size)
         {
-            ball.delta.y = -ball.delta.y;
             ball.shape.center.y = arena_size - ball.shape.radius;
+            ball.delta.y = -ball.delta.y;
         }
 
-        if (ball.shape.center.y - ball.shape.radius <= 0.0)
+        for (size_t i = 0; i < game.bricks.size(); ++i)
         {
-            game.balls.clear();
-            return;
+            if (collide_ball_brick(ball, *game.bricks[i]))
+            {
+                BrickType type = game.bricks[i]->get_type();
+                Square square = game.bricks[i]->get_square();
+
+                ball.delta.y = -ball.delta.y;
+                game.score += score_per_hit;
+
+                if (type == BALL_BRICK)
+                {
+                    Ball new_ball;
+                    new_ball.shape.center = square.center;
+                    new_ball.shape.radius = new_ball_radius;
+                    new_ball.delta = ball.delta;
+
+                    new_balls.push_back(new_ball);
+                }
+
+                if (type == SPLIT_BRICK)
+                {
+                    double new_size = (square.size - split_brick_gap) / 2.0;
+
+                    if (new_size >= brick_size_min)
+                    {
+                        double offset = (new_size + split_brick_gap) / 2.0;
+
+                        Square s1{{square.center.x - offset,
+                                    square.center.y - offset},
+                                   new_size};
+
+                        Square s2{{square.center.x + offset,
+                                    square.center.y - offset},
+                                   new_size};
+
+                        Square s3{{square.center.x - offset,
+                                    square.center.y + offset},
+                                   new_size};
+
+                        Square s4{{square.center.x + offset,
+                                    square.center.y + offset},
+                                   new_size};
+
+                        new_bricks.push_back(std::make_shared<SplitBrick>(s1));
+                        new_bricks.push_back(std::make_shared<SplitBrick>(s2));
+                        new_bricks.push_back(std::make_shared<SplitBrick>(s3));
+                        new_bricks.push_back(std::make_shared<SplitBrick>(s4));
+                    }
+                }
+
+                game.bricks[i]->hit();
+
+                if (game.bricks[i]->get_hit_points() == 0)
+                {
+                    game.bricks.erase(game.bricks.begin() + i);
+                }
+
+                break;
+            }
+        }
+
+        if (collide_paddle_ball(game.paddle, ball) &&
+            ball.delta.y < 0.0)
+        {
+            ball.delta.y = -ball.delta.y;
+
+            ball.shape.center.y =
+                game.paddle.circle.center.y +
+                game.paddle.circle.radius +
+                ball.shape.radius;
         }
     }
-}
 
+    for (auto const& new_ball : new_balls)
+    {
+        game.balls.push_back(new_ball);
+    }
+
+    for (auto const& new_brick : new_bricks)
+    {
+        game.bricks.push_back(new_brick);
+    }
+
+    for (size_t i = 0; i < game.balls.size(); ++i)
+    {
+        for (size_t j = i + 1; j < game.balls.size(); ++j)
+        {
+            if (collide_ball_ball(game.balls[i], game.balls[j]))
+            {
+                std::swap(game.balls[i].delta, game.balls[j].delta);
+            }
+        }
+    }
+
+    game.balls.erase(
+        std::remove_if(
+            game.balls.begin(),
+            game.balls.end(),
+            [](Ball const& ball)
+            {
+                return ball.shape.center.y + ball.shape.radius < 0.0;
+            }),
+        game.balls.end()
+    );
+
+    if (game.bricks.empty())
+    {
+        game.status = WON;
+        game.score += game.lives * score_per_life;
+        std::cout << message::won();
+        return;
+    }
+
+    if (game.balls.empty() && game.lives == 0)
+    {
+        game.status = LOST;
+        std::cout << message::lost();
+    }
+}
 bool game_over(Game const& game)
 {
-    return game.bricks.empty() ||
-           (game.balls.empty() && game.lives == 0);
+    return game.status == WON || game.status == LOST;
 }
 
 bool save_game(std::string const& filename, Game const& game)

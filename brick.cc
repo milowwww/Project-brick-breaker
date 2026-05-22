@@ -39,3 +39,15 @@ SplitBrick::SplitBrick(Square square)
     : Brick(square, SPLIT_BRICK)
 {
 }
+
+void Brick::hit()
+{
+}
+
+void RainbowBrick::hit()
+{
+    if (hit_points > 0)
+    {
+        --hit_points;
+    }
+}
