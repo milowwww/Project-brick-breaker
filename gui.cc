@@ -178,7 +178,7 @@ void My_window::start_clicked()
 }
 void My_window::step_clicked()
 {
-    if (!game.balls.empty())
+    if (!game_over(game) && !game.balls.empty())
     {
         update_game(game);
         update_infos();
@@ -301,17 +301,29 @@ void My_window::dialog_response(int response, Gtk::FileChooserDialog *dialog)
 
 bool My_window::loop()
 {
-    if (loop_activated)
+    if (!loop_activated || game_over(game))
     {
-        if (!game.balls.empty())
-        {
-            update_game(game);
-            update_infos();
-            drawing.queue_draw();
-            return true;
-        }
+        loop_conn.disconnect();
+        loop_activated = false;
+
+        buttons[EXIT].set_sensitive(true);
+        buttons[OPEN].set_sensitive(true);
+        buttons[SAVE].set_sensitive(true);
+        buttons[RESTART].set_sensitive(true);
+        buttons[START].set_label("start");
+        buttons[STEP].set_sensitive(true);
+
+        return false;
     }
-    return false;
+
+    if (!game.balls.empty())
+    {
+        update_game(game);
+        update_infos();
+        drawing.queue_draw();
+    }
+
+    return true;
 }
 
 void My_window::set_infos()
@@ -345,6 +357,52 @@ void My_window::set_drawing()
     drawing.set_expand();
     drawing.set_draw_func(sigc::mem_fun(*this, &My_window::on_draw));
 }
+
+Color next_split_color(Color color)
+{
+    switch (color)
+    {
+    case RED:
+        return ORANGE;
+    case ORANGE:
+        return YELLOW;
+    case YELLOW:
+        return GREEN;
+    default:
+        return GREEN;
+    }
+}
+
+void graphic_draw_split_brick_rec(Square const& square, Color color)
+{
+    graphic_draw_square(square, color, true);
+
+    double small_size = (square.size - split_brick_gap) / 2.0;
+
+    if (small_size >= brick_size_min)
+    {
+        double offset = (small_size + split_brick_gap) / 2.0;
+
+        Square s1{{square.center.x - offset, square.center.y - offset}, small_size};
+        Square s2{{square.center.x + offset, square.center.y - offset}, small_size};
+        Square s3{{square.center.x - offset, square.center.y + offset}, small_size};
+        Square s4{{square.center.x + offset, square.center.y + offset}, small_size};
+
+        Color next_color = next_split_color(color);
+
+        graphic_draw_split_brick_rec(s1, next_color);
+        graphic_draw_split_brick_rec(s2, next_color);
+        graphic_draw_split_brick_rec(s3, next_color);
+        graphic_draw_split_brick_rec(s4, next_color);
+    }
+}
+
+void graphic_draw_split_brick(Square const& square)
+{
+    graphic_draw_split_brick_rec(square, RED);
+}
+
+
 void My_window::on_draw(const Cairo::RefPtr<Cairo::Context> &cr, int width, int height)
 {
     graphic_set_context(cr);
@@ -387,25 +445,8 @@ for (auto const& brick : game.bricks)
         c.radius = new_ball_radius;
         graphic_draw_circle(c, BLACK, true);
     }
-    else if (type == SPLIT_BRICK) {
-    graphic_draw_square(square, RED, true);
-
-    double small_size = (square.size - split_brick_gap) / 2.0;
-
-    if (small_size >= brick_size_min)
-    {
-        double offset = (small_size + split_brick_gap) / 2.0;
-
-        Square s1{{square.center.x - offset, square.center.y - offset}, small_size};
-        Square s2{{square.center.x + offset, square.center.y - offset}, small_size};
-        Square s3{{square.center.x - offset, square.center.y + offset}, small_size};
-        Square s4{{square.center.x + offset, square.center.y + offset}, small_size};
-
-        graphic_draw_square(s1, ORANGE, true);
-        graphic_draw_square(s2, ORANGE, true);
-        graphic_draw_square(s3, ORANGE, true);
-        graphic_draw_square(s4, ORANGE, true);
-    }
+else if (type == SPLIT_BRICK) {
+    graphic_draw_split_brick(square);
 }
 }
 
@@ -476,6 +517,8 @@ void My_window::on_drawing_move(double x, double y)
 
     double old_x = game.paddle.circle.center.x;
     game.paddle.circle.center.x = model_x;
+    game.paddle.delta.x = game.paddle.circle.center.x - old_x;
+    game.paddle.delta.y = 0.0;
 
     // sécurité : si la raquette sort de l’arène, on annule
     double y0 = game.paddle.circle.center.y;

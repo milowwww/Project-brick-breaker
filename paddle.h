@@ -5,7 +5,8 @@
 
 // Structure représentant la raquette
 struct Paddle {
-    Circle circle;   // cercle représentant la raquette
+    Circle circle;
+    Point delta{0.0, 0.0};
 };
 
 // Création d'une raquette

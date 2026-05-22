@@ -116,6 +116,77 @@ bool collide_ball_ball(Ball const& b1, Ball const& b2)
     return norm_squared(diff) < radius_sum * radius_sum;
 }
 
+
+void limit_delta(Ball& ball)
+{
+    double speed = norm(ball.delta);
+
+    if (speed > delta_norm_max)
+    {
+        double factor = delta_norm_max / speed;
+        ball.delta.x *= factor;
+        ball.delta.y *= factor;
+    }
+}
+
+void collide_two_balls(Ball& b1, Ball& b2)
+{
+    Point axis{
+        b2.shape.center.x - b1.shape.center.x,
+        b2.shape.center.y - b1.shape.center.y
+    };
+
+    double dist2 = norm_squared(axis);
+
+    if (dist2 < epsil_zero) {
+        return;
+    }
+
+    double dist = std::sqrt(dist2);
+
+    Point n{
+        axis.x / dist,
+        axis.y / dist
+    };
+
+    double min_dist = b1.shape.radius + b2.shape.radius;
+
+    if (dist < min_dist)
+    {
+        double overlap = min_dist - dist;
+
+        b1.shape.center.x -= n.x * overlap / 2.0;
+        b1.shape.center.y -= n.y * overlap / 2.0;
+
+        b2.shape.center.x += n.x * overlap / 2.0;
+        b2.shape.center.y += n.y * overlap / 2.0;
+    }
+
+    double v1n = b1.delta.x * n.x + b1.delta.y * n.y;
+    double v2n = b2.delta.x * n.x + b2.delta.y * n.y;
+
+    if (v1n - v2n <= 0.0) {
+        return;
+    }
+
+    double m1 = b1.shape.radius * b1.shape.radius;
+    double m2 = b2.shape.radius * b2.shape.radius;
+
+    double impulse1 = (v2n - v1n) * (2.0 * m2 / (m1 + m2));
+    double impulse2 = (v1n - v2n) * (2.0 * m1 / (m1 + m2));
+
+    b1.delta.x += impulse1 * n.x;
+    b1.delta.y += impulse1 * n.y;
+
+    b2.delta.x += impulse2 * n.x;
+    b2.delta.y += impulse2 * n.y;
+
+    limit_delta(b1);
+    limit_delta(b2);
+}
+
+
+
 bool collide_ball_brick(Ball const& ball, Brick const& brick)
 {
     Square square = brick.get_square();
@@ -136,6 +207,95 @@ bool collide_ball_brick(Ball const& ball, Brick const& brick)
     return diff_x * diff_x + diff_y * diff_y <
            ball.shape.radius * ball.shape.radius;
 }
+
+
+void bounce_ball_on_brick(Ball& ball, Brick const& brick)
+{
+    Square square = brick.get_square();
+    double half = square.size / 2.0;
+
+    Point diff{
+        ball.shape.center.x - square.center.x,
+        ball.shape.center.y - square.center.y
+    };
+
+    Point bounded{
+        std::max(-half, std::min(diff.x, half)),
+        std::max(-half, std::min(diff.y, half))
+    };
+
+    Point normal{
+        diff.x - bounded.x,
+        diff.y - bounded.y
+    };
+
+    double n_norm = norm(normal);
+
+    if (n_norm < epsil_zero)
+    {
+        if (std::abs(diff.x) > std::abs(diff.y)) {
+            ball.delta.x = -ball.delta.x;
+        } else {
+            ball.delta.y = -ball.delta.y;
+        }
+        return;
+    }
+
+    normal.x /= n_norm;
+    normal.y /= n_norm;
+
+    double vn = ball.delta.x * normal.x + ball.delta.y * normal.y;
+
+    ball.delta.x -= 2.0 * vn * normal.x;
+    ball.delta.y -= 2.0 * vn * normal.y;
+}
+
+
+void collide_ball_paddle_physics(Ball& ball, Paddle const& paddle)
+{
+    Point axis{
+        ball.shape.center.x - paddle.circle.center.x,
+        ball.shape.center.y - paddle.circle.center.y
+    };
+
+    double dist2 = norm_squared(axis);
+
+    if (dist2 < epsil_zero) {
+        return;
+    }
+
+    double dist = std::sqrt(dist2);
+
+    Point n{
+        axis.x / dist,
+        axis.y / dist
+    };
+
+    Point relative_delta{
+        ball.delta.x - paddle.delta.x,
+        ball.delta.y - paddle.delta.y
+    };
+
+    double vn = relative_delta.x * n.x + relative_delta.y * n.y;
+
+    if (vn < 0.0)
+    {
+        ball.delta.x -= 2.0 * vn * n.x;
+        ball.delta.y -= 2.0 * vn * n.y;
+    }
+
+    double speed = norm(ball.delta);
+
+    if (speed > delta_norm_max)
+    {
+        double factor = delta_norm_max / speed;
+        ball.delta.x *= factor;
+        ball.delta.y *= factor;
+    }
+}
+
+
+
 
 bool collide_paddle_ball(Paddle const& paddle, Ball const& ball)
 {
@@ -390,11 +550,11 @@ void update_game(Game& game)
         for (size_t i = 0; i < game.bricks.size(); ++i)
         {
             if (collide_ball_brick(ball, *game.bricks[i]))
-            {
+{
                 BrickType type = game.bricks[i]->get_type();
                 Square square = game.bricks[i]->get_square();
 
-                ball.delta.y = -ball.delta.y;
+                bounce_ball_on_brick(ball, *game.bricks[i]);
                 game.score += score_per_hit;
 
                 if (type == BALL_BRICK)
@@ -450,15 +610,15 @@ void update_game(Game& game)
         }
 
         if (collide_paddle_ball(game.paddle, ball) &&
-            ball.delta.y < 0.0)
-        {
-            ball.delta.y = -ball.delta.y;
+    ball.delta.y < 0.0)
+{
+    collide_ball_paddle_physics(ball, game.paddle);
 
-            ball.shape.center.y =
-                game.paddle.circle.center.y +
-                game.paddle.circle.radius +
-                ball.shape.radius;
-        }
+    ball.shape.center.y =
+        game.paddle.circle.center.y +
+        game.paddle.circle.radius +
+        ball.shape.radius;
+}
     }
 
     for (auto const& new_ball : new_balls)
@@ -477,7 +637,7 @@ void update_game(Game& game)
         {
             if (collide_ball_ball(game.balls[i], game.balls[j]))
             {
-                std::swap(game.balls[i].delta, game.balls[j].delta);
+                collide_two_balls(game.balls[i], game.balls[j]);
             }
         }
     }
